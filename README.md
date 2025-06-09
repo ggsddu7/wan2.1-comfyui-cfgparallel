@@ -1,9 +1,5 @@
 <div align="center">
 
-# Usage
-```
-env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web.py
-```
 
 # ComfyUI
 **The most powerful and modular visual AI engine and application.**
@@ -39,6 +35,14 @@ env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD
 ComfyUI lets you design and execute advanced stable diffusion pipelines using a graph/nodes/flowchart based interface. Available on Windows, Linux, and macOS.
 
 ## Get Started
+
+```
+env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web.py
+```
+cfg并行，2卡1.95倍加速; 
+测试显卡3090*2
+512*896*65
+单步耗时：46s/单卡 24s/双卡
 
 #### [Desktop Application](https://www.comfy.org/download)
 - The easiest way to get started. 
