@@ -4,6 +4,7 @@ import torch
 import comfy.model_management
 import comfy.utils
 
+import time
 
 class WanImageToVideo:
     @classmethod
@@ -27,6 +28,7 @@ class WanImageToVideo:
     CATEGORY = "conditioning/video_models"
 
     def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, clip_vision_output=None):
+        t1 = time.time()
         latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         if start_image is not None:
             start_image = comfy.utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
@@ -39,13 +41,17 @@ class WanImageToVideo:
 
             positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
             negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+        t2 = time.time()
 
         if clip_vision_output is not None:
             positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
             negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+        t3 = time.time()
 
         out_latent = {}
         out_latent["samples"] = latent
+        t4 = time.time()
+        print(f"node_wan-encode: {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} | {t4-t1:.0f}")
         return (positive, negative, out_latent)
 
 

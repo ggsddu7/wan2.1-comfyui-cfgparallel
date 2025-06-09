@@ -19,6 +19,8 @@ import comfy.hooks
 import scipy.stats
 import numpy
 
+import torch.distributed as dist
+
 def get_area_and_mult(conds, x_in, timestep_in):
     dims = tuple(x_in.shape[2:])
     area = None
@@ -198,18 +200,21 @@ def calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Ten
     return executor.execute(model, conds, x_in, timestep, model_options)
 
 def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Tensor, timestep, model_options):
-    out_conds = []
-    out_counts = []
+    # out_conds = []
+    # out_counts = []
     # separate conds by matching hooks
     hooked_to_run: dict[comfy.hooks.HookGroup,list[tuple[tuple,int]]] = {}
     default_conds = []
     has_default_conds = False
 
-    for i in range(len(conds)):
-        out_conds.append(torch.zeros_like(x_in))
-        out_counts.append(torch.ones_like(x_in) * 1e-37)
+    out_conds = [torch.zeros_like(x_in) for _ in range(2)]
+    rank = dist.get_rank()
+    conds_ = [conds[rank]]
+    for i in range(len(conds_)):
+        # out_conds.append(torch.zeros_like(x_in))
+        # out_counts.append(torch.ones_like(x_in) * 1e-37)
 
-        cond = conds[i]
+        cond = conds_[i]
         default_c = []
         if cond is not None:
             for x in cond:
@@ -309,7 +314,9 @@ def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Te
                 output = model_options['model_function_wrapper'](model.apply_model, {"input": input_x, "timestep": timestep_, "c": c, "cond_or_uncond": cond_or_uncond}).chunk(batch_chunks)
             else:
                 output = model.apply_model(input_x, timestep_, **c).chunk(batch_chunks)
+            dist.all_gather(out_conds, output[0])
 
+            """
             for o in range(batch_chunks):
                 cond_index = cond_or_uncond[o]
                 a = area[o]
@@ -325,9 +332,10 @@ def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Te
                         out_cts = out_cts.narrow(i + 2, a[i + dims], a[i])
                     out_c += output[o] * mult[o]
                     out_cts += mult[o]
+            """
 
-    for i in range(len(out_conds)):
-        out_conds[i] /= out_counts[i]
+    # for i in range(len(out_conds)):
+        # out_conds[i] /= out_counts[i]
 
     return out_conds
 

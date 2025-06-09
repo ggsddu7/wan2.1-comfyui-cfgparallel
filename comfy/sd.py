@@ -3,6 +3,8 @@ import torch
 from enum import Enum
 import logging
 
+import time
+
 from comfy import model_management
 from comfy.utils import ProgressBar
 from .ldm.models.autoencoder import AutoencoderKL, AutoencodingEngine
@@ -491,18 +493,21 @@ class VAE:
     def decode(self, samples_in):
         pixel_samples = None
         try:
+            t1 = time.time()
             memory_used = self.memory_used_decode(samples_in.shape, self.vae_dtype)
             model_management.load_models_gpu([self.patcher], memory_required=memory_used)
             free_memory = model_management.get_free_memory(self.device)
             batch_number = int(free_memory / memory_used)
             batch_number = max(1, batch_number)
 
+            t2 = time.time()
             for x in range(0, samples_in.shape[0], batch_number):
                 samples = samples_in[x:x+batch_number].to(self.vae_dtype).to(self.device)
                 out = self.process_output(self.first_stage_model.decode(samples).to(self.output_device).float())
                 if pixel_samples is None:
                     pixel_samples = torch.empty((samples_in.shape[0],) + tuple(out.shape[1:]), device=self.output_device)
                 pixel_samples[x:x+batch_number] = out
+            t3 = time.time()
         except model_management.OOM_EXCEPTION:
             logging.warning("Warning: Ran out of memory when regular VAE decoding, retrying with tiled VAE decoding.")
             dims = samples_in.ndim - 2
@@ -516,6 +521,8 @@ class VAE:
                 pixel_samples = self.decode_tiled_3d(samples_in, tile_x=tile, tile_y=tile, overlap=(1, overlap, overlap))
 
         pixel_samples = pixel_samples.to(self.output_device).movedim(1,-1)
+        t4 = time.time()
+        print(f"sd-vae-decode: {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} | {t4-t1:.0f}")
         return pixel_samples
 
     def decode_tiled(self, samples, tile_x=None, tile_y=None, overlap=None, tile_t=None, overlap_t=None):

@@ -284,6 +284,9 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
             has_subgraph = False
         else:
             input_data_all, missing_keys = get_input_data(inputs, class_def, unique_id, caches.outputs, dynprompt, extra_data)
+            # if unique_id == '3' and 'grapp' in extra_data and not hasattr(input_data_all['model'][0], "grapp"):
+                # print("==asign grapp to model==")
+                # input_data_all['model'][0].grapp = extra_data['grapp']
             if server.client_id is not None:
                 server.last_node_id = display_node_id
                 server.send_sync("executing", { "node": unique_id, "display_node": display_node_id, "prompt_id": prompt_id }, server.client_id)
@@ -326,6 +329,10 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
                 GraphBuilder.set_default_prefix(unique_id, call_index, 0)
             output_data, output_ui, has_subgraph = get_output_data(obj, input_data_all, execution_block_cb=execution_block_cb, pre_execute_cb=pre_execute_cb)
         if len(output_ui) > 0:
+            if server.client_id is not None:
+                server.send_sync("executed", { "node": unique_id, "display_node": display_node_id, "output": output_ui, "prompt_id": prompt_id }, server.client_id)
+            else:
+                output_ui['inputs'] = input_data_all
             caches.ui.set(unique_id, {
                 "meta": {
                     "node_id": unique_id,
@@ -335,8 +342,6 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
                 },
                 "output": output_ui
             })
-            if server.client_id is not None:
-                server.send_sync("executed", { "node": unique_id, "display_node": display_node_id, "output": output_ui, "prompt_id": prompt_id }, server.client_id)
         if has_subgraph:
             cached_outputs = []
             new_node_ids = []
@@ -394,7 +399,8 @@ def execute(server, dynprompt, caches, current_item, extra_data, executed, promp
                 input_data_formatted[name] = [format_value(x) for x in inputs]
 
         logging.error(f"!!! Exception during processing !!! {ex}")
-        logging.error(traceback.format_exc())
+        if "stop-generate" not in str(ex):
+            logging.error(traceback.format_exc())
 
         error_details = {
             "node_id": real_node_id,
@@ -493,6 +499,7 @@ class PromptExecutor:
             execution_list = ExecutionList(dynamic_prompt, self.caches.outputs)
             current_outputs = self.caches.outputs.all_node_ids()
             for node_id in list(execute_outputs):
+                print("=====", node_id)
                 execution_list.add_node(node_id)
 
             while not execution_list.is_empty():

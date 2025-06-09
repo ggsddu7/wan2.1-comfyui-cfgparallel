@@ -1,8 +1,10 @@
 #code taken from: https://github.com/wl-zhao/UniPC and modified
 
+import time
 import torch
 import math
 import logging
+import gradio as gr
 
 from tqdm.auto import trange
 
@@ -701,8 +703,11 @@ class UniPC:
         method='singlestep', lower_order_final=True, denoise_to_zero=False, solver_type='dpm_solver',
         atol=0.0078, rtol=0.05, corrector=False, callback=None, disable_pbar=False
     ):
+        app = getattr(self.model.__closure__[6].cell_contents.__closure__[1].cell_contents.__closure__[0].cell_contents.inner_model.model_patcher, "grapp", None)
+        # print(f"0000 {x.shape}")
         # t_0 = 1. / self.noise_schedule.total_N if t_end is None else t_end
         # t_T = self.noise_schedule.T if t_start is None else t_start
+        # import pudb; pu.db
         steps = len(timesteps) - 1
         if method == 'multistep':
             assert steps >= order
@@ -710,6 +715,7 @@ class UniPC:
             assert timesteps.shape[0] - 1 == steps
             # with torch.no_grad():
             for step_index in trange(steps, disable=disable_pbar):
+                ts = time.time()
                 if step_index == 0:
                     vec_t = timesteps[0].expand((x.shape[0]))
                     model_prev_list = [self.model_fn(x, vec_t)]
@@ -750,12 +756,34 @@ class UniPC:
                             if model_x is None:
                                 model_x = self.model_fn(x, vec_t)
                             model_prev_list[-1] = model_x
+                # m = int(x.shape[3]/2)
+                # x_ = x.clone().detach()[:,:,:1,:,:].repeat(1,1,x.shape[2],1,1)
+                # x[:,:,:,m:,:]=x_[:,:,:,m:,:] # 下半图固定; 效果很差
+                te = time.time()
+                if app is not None:
+                    if app.mode == 1:
+                        raise Exception("stop-generate")
+                    ssdur = te-ts
+                    eta = ((app.batch_size-app.batch_idx)*steps-step_index)*ssdur
+                    print(f"uni_pc.py bbbbb {ssdur:.2f} {app.batch_size} {app.batch_idx} {steps} {step_index} {eta:.2f}")
+                    eq = app._queue.event_queue_per_concurrency_id[app.fn_eq['generate']]
+                    app._queue.send_message(app._queue.active_jobs[0][0], gr.server_messages.EstimationMessage(rank=None, rank_eta=eta, queue_size=len(eq.queue)))
+                    for ii, e in enumerate(eq.queue):
+                        ebs, esteps = e.data.data[-8], e.data.data[-7]
+                        eta_ = ebs*esteps*ssdur
+                        eta += eta_
+                        print("ccccc", ii, ebs, esteps, eta_, eta)
+                        app._queue.send_message(e, gr.server_messages.EstimationMessage(rank=ii, rank_eta=eta, queue_size=len(eq.queue)))
                 if callback is not None:
                     callback({'x': x, 'i': step_index, 'denoised': model_prev_list[-1]})
         else:
             raise NotImplementedError()
         # if denoise_to_zero:
         #     x = self.denoise_to_zero_fn(x, torch.ones((x.shape[0],)).to(device) * t_0)
+        # print(f"1111 {x.shape}")
+        # import pudb; pu.db
+        # return x[0][0].unsqueeze(0).unsqueeze(1).repeat(1, 16, 1, 1, 1)
+        # return x[:,:,:1,:,:].repeat(1,1,x.shape[2],1,1)
         return x
 
 

@@ -1,5 +1,7 @@
 # original version: https://github.com/Wan-Video/Wan2.1/blob/main/wan/modules/model.py
 # Copyright 2024-2025 The Alibaba Wan Team Authors. All rights reserved.
+import time
+
 import math
 
 import torch
@@ -67,8 +69,11 @@ class WanSelfAttention(nn.Module):
             v = self.v(x).view(b, s, n * d)
             return q, k, v
 
+        t0 = time.time() * 1000
         q, k, v = qkv_fn(x)
+        t1 = time.time() * 1000
         q, k = apply_rope(q, k, freqs)
+        t2 = time.time() * 1000
 
         x = optimized_attention(
             q.view(b, s, n * d),
@@ -76,8 +81,11 @@ class WanSelfAttention(nn.Module):
             v,
             heads=self.num_heads,
         )
+        t3 = time.time() * 1000
 
         x = self.o(x)
+        t4 = time.time() * 1000
+        # print(f"WanSelfAttention {t1-t0:.0f} {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t4-t0:.0f}")
         return x
 
 
@@ -122,22 +130,34 @@ class WanI2VCrossAttention(WanSelfAttention):
             x(Tensor): Shape [B, L1, C]
             context(Tensor): Shape [B, L2, C]
         """
+        t1 = time.time() * 1000
         context_img = context[:, :257]
         context = context[:, 257:]
+        t2 = time.time() * 1000
 
         # compute query, key, value
         q = self.norm_q(self.q(x))
+        t3 = time.time() * 1000
         k = self.norm_k(self.k(context))
+        t4 = time.time() * 1000
         v = self.v(context)
+        t5 = time.time() * 1000
         k_img = self.norm_k_img(self.k_img(context_img))
+        t6 = time.time() * 1000
         v_img = self.v_img(context_img)
+        t7 = time.time() * 1000
         img_x = optimized_attention(q, k_img, v_img, heads=self.num_heads)
+        t8 = time.time() * 1000
         # compute attention
         x = optimized_attention(q, k, v, heads=self.num_heads)
+        t9 = time.time() * 1000
 
         # output
         x = x + img_x
+        t10 = time.time() * 1000
         x = self.o(x)
+        t11 = time.time() * 1000
+        # print(f"WanI2VCrossAttention {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t9-t8:.0f} {t10-t9:.0f} {t11-t10:.0f} {t11-t1:.0f}")
         return x
 
 
@@ -202,20 +222,43 @@ class WanAttentionBlock(nn.Module):
         """
         # assert e.dtype == torch.float32
 
+        t0 = time.time() * 1000
         e = (comfy.model_management.cast_to(self.modulation, dtype=x.dtype, device=x.device) + e).chunk(6, dim=1)
         # assert e[0].dtype == torch.float32
 
         # self-attention
+        t1 = time.time() * 1000
+        """
         y = self.self_attn(
             self.norm1(x) * (1 + e[1]) + e[0],
             freqs)
+        """
+        aa = self.norm1(x)
+        ta = time.time() * 1000
+        bb = aa * (1 + e[1]) + e[0]
+        tb = time.time() * 1000
+        y = self.self_attn(bb, freqs)
+        t2 = time.time() * 1000
 
         x = x + y * e[2]
+        t3 = time.time() * 1000
 
         # cross-attention & ffn
-        x = x + self.cross_attn(self.norm3(x), context)
+        # x = x + self.cross_attn(self.norm3(x), context)
+        cc = self.norm3(x)
+        tc = time.time() * 1000
+        dd = self.cross_attn(cc, context)
+        td = time.time() * 1000
+        x = x + dd
+
+        t4 = time.time() * 1000
         y = self.ffn(self.norm2(x) * (1 + e[4]) + e[3])
+        t5 = time.time() * 1000
         x = x + y * e[5]
+        t6 = time.time() * 1000
+        # print(f"WanAttentionBlock {self.bidx} {t1-t0:.0f} {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t6-t0:.0f}", end=" | ")
+        # print(f"WanAttentionBlock {self.bidx} {t1-t0:.0f} {t2-t1:.0f}({ta-t1:.0f} {tb-ta:.0f} {t2-tb:.0f}) {t3-t2:.0f} {t4-t3:.0f}({tc-t3:.0f} {td-tc:.0f} {t4-td:.0f}) {t5-t4:.0f} {t6-t5:.0f} {t6-t0:.0f}")
+        # print("-----------------------------------------------------------------------------------")
         return x
 
 
@@ -365,6 +408,8 @@ class WanModel(torch.nn.Module):
                               window_size, qk_norm, cross_attn_norm, eps, operation_settings=operation_settings)
             for _ in range(num_layers)
         ])
+        for bidx, blk in enumerate(self.blocks):
+            blk.bidx = bidx
 
         # head
         self.head = Head(dim, out_dim, patch_size, eps, operation_settings=operation_settings)
@@ -406,15 +451,20 @@ class WanModel(torch.nn.Module):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
+        # import pudb; pu.db
+        t1 = time.time() * 1000
         # embeddings
         x = self.patch_embedding(x.float()).to(x.dtype)
+        t2 = time.time() * 1000
         grid_sizes = x.shape[2:]
         x = x.flatten(2).transpose(1, 2)
+        t3 = time.time() * 1000
 
         # time embeddings
         e = self.time_embedding(
             sinusoidal_embedding_1d(self.freq_dim, t).to(dtype=x[0].dtype))
         e0 = self.time_projection(e).unflatten(1, (6, self.dim))
+        t4 = time.time() * 1000
 
         # context
         context = self.text_embedding(context)
@@ -429,14 +479,57 @@ class WanModel(torch.nn.Module):
             freqs=freqs,
             context=context)
 
-        for block in self.blocks:
-            x = block(x, **kwargs)
+        """
+        512*896*81=>[1, 16, 21, 112, 64]=>[1, 37632, 5120] ~22m
+        512*896*73=>[1, 16, 19, 112, 64]=>[1, 34048, 5120] # 分层加载临界点
+        512*896*65=>[1, 16, 17, 112, 64]=>[1, 30464, 5120]
+        512*896*49=>[1, 16, 13, 112, 64]=>[1, 23296, 5120]
+        512*896*33=>[1, 16,  9, 112, 64]=>[1, 16128, 5120]
+        512*896*17=>[1, 16,  5, 112, 64]=>[1,  8960, 5120]
+
+        720*1280*81=>[1, 16, 21, 160, 90]=>[1, 75600, 5120] ~70m
+        720*1280*65=>[1, 16, 17, 160, 90]=>[1, 61200, 5120]
+        720*1280*49=>[1, 16, 13, 160, 90]=>[1, 46800, 5120]
+        720*1280*33=>[1, 16,  9, 160, 90]=>[1, 32400, 5120]
+        720*1280*17=>[1, 16,  5, 160, 90]=>[1, 18000, 5120]
+        """
+        xs1, nblock = x.shape[1], len(self.blocks)
+        if xs1 <= 34048: # 不分层加载
+            t5 = time.time() * 1000
+            for block in self.blocks:
+                x = block(x, **kwargs)
+            t6 = time.time() * 1000
+        else: # 分层加载
+            skconfig={75600: (2,4), 61200: (2, 20), 46800: (2, 30)}
+            slen, klen = skconfig[min(filter(lambda k: k-xs1>=0, skconfig.keys()))]
+            # print(f"### == {','.join([blk.cross_attn.q.weight.device.type for blk in self.blocks])} {xs1} {slen} {klen}")
+            for bidx in range(0, klen):
+                if self.blocks[bidx].cross_attn.q.weight.device.type == "cpu":
+                    self.blocks[bidx].to("cuda")
+            for bidx in range(klen, nblock):
+                if self.blocks[bidx].cross_attn.q.weight.device.type == "cuda":
+                    self.blocks[bidx].to("cpu", non_blocking=True)
+            for bidx, block in enumerate(self.blocks):
+                # print(f"### {bidx} {','.join([blk.cross_attn.q.weight.device.type for blk in self.blocks])}")
+                for kk in range(bidx+slen, bidx, -1):
+                    if kk >= klen and kk < nblock:
+                        if self.blocks[kk].cross_attn.q.weight.device.type == "cpu":
+                            self.blocks[kk].to("cuda", non_blocking=True)
+
+                if block.cross_attn.q.weight.device.type == "cpu":
+                    block.to("cuda")
+                x = block(x, **kwargs)
+                if bidx >= klen and bidx < nblock:
+                    block.to("cpu", non_blocking=True)
 
         # head
         x = self.head(x, e)
+        t7 = time.time() * 1000
 
         # unpatchify
         x = self.unpatchify(x, grid_sizes)
+        t8 = time.time() * 1000
+        # print(f"WanModel {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t8-t1:.0f}")
         return x
 
     def forward(self, x, timestep, context, clip_fea=None, **kwargs):
