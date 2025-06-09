@@ -1,5 +1,10 @@
 <div align="center">
 
+# Usage
+```
+env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web.py
+```
+
 # ComfyUI
 **The most powerful and modular visual AI engine and application.**
 
