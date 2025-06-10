@@ -39,9 +39,9 @@ ComfyUI lets you design and execute advanced stable diffusion pipelines using a 
 ```
 env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web.py
 ```
-cfg并行，2卡1.95倍加速; 
-测试显卡3090*2
-512*896*65
+cfg并行，2卡1.95倍加速  
+测试显卡:`3090*2`    
+w*h*frames:`512*896*65`  
 单步耗时：46s/单卡 24s/双卡
 
 #### [Desktop Application](https://www.comfy.org/download)
