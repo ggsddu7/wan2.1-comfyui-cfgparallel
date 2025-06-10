@@ -499,7 +499,7 @@ class PromptExecutor:
             execution_list = ExecutionList(dynamic_prompt, self.caches.outputs)
             current_outputs = self.caches.outputs.all_node_ids()
             for node_id in list(execute_outputs):
-                print("=====", node_id)
+                print("==execute-output==", node_id)
                 execution_list.add_node(node_id)
 
             while not execution_list.is_empty():

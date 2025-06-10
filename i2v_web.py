@@ -184,7 +184,7 @@ class Img2videoGenerator():
             cfg_scale, seed, fps, debug=0,
             progress = gr.Progress()
         ):
-        print("!!!!!teacache:", teacache)
+        print("!!!!!teacache:", teacache, app)
         """
         for i in range(10):
             eq = app._queue.event_queue_per_concurrency_id[fn_eq['generate']]
@@ -310,7 +310,7 @@ class Img2videoGenerator():
                             f""" {max_idx} {output_video_size:.2f} {t6-t5:.2f} {t5-t1:.2f} | {dsum:.2f} {dmax:.2f} {dmax:.2f} {dmean:.2f} {dvar:.2f}"""
                             f""" {','.join([f'{d:.1f}' for d in diffs])} | {t2-t1:.2f} {t3-t2:.2f} {t4-t3:.2f} {t5-t4:.2f} | {prompt}""")
                 # videos[vi] = gr.Video(value=output_video_path, height=512, label=f"seed: {seed_}", autoplay=True, loop=True)
-                videos[vi] = [output_video_path, seed]
+                videos[vi] = output_video_path
                 with open(output_video_params, "w") as f:
                     f.write(f"{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())} {prompt} seed: {seed_} steps: {steps} 时长: {length}/{fps}={duration:.2f} real_len: {len(np_imgs)} cfg: {cfg_scale} 耗时: {t5-t1:.2f} Teacache: {teacache}")
                 # yield videos
@@ -321,7 +321,10 @@ class Img2videoGenerator():
             print(f"{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())} barrier-out-B {rank}")
 
         # os.remove(input_path)
-        return videos
+        if rank == 0:
+            self.retq.put(videos)
+            self.retq.put(None)
+            print(f"{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())} put2retq {rank}")
 
 # i2v_generator = Img2videoGenerator()
 
@@ -360,10 +363,10 @@ def ui(reqq=None, retq=None):
         reqq.put(args)
         while True:
             relt = retq.get()
-            print(f"=========rrr========== {relt}")
+            print(f"{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())} =========rrr========== {relt}")
             if not relt:
-                return [None, None, None, None, ""]
-            yield [None, None, None, None, ""]
+                return relt
+            yield relt
 
     with gr.Blocks(css=css) as demo:
         gr.Markdown(
