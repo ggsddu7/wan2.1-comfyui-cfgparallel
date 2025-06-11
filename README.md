@@ -36,8 +36,15 @@ ComfyUI lets you design and execute advanced stable diffusion pipelines using a 
 
 ## Get Started
 
+### web
 ```
-env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web.py
+env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web-2gpu.py
+```
+### debug
+```
+env CUDA_VISIBLE_DEVICES=0 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web-1gpu.py --debug 1
+env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web-2gpu.py --debug 1
+
 ```
 cfg并行，2卡1.95倍加速  
 测试显卡:`3090*2`    

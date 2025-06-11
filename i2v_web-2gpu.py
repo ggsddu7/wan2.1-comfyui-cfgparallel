@@ -181,7 +181,7 @@ class Img2videoGenerator():
             prompt, negative_prompt,
             init_img, batch_size, steps, teacache,
             width, height, length,
-            cfg_scale, seed, fps, debug=0,
+            cfg_scale, seed, fps,
             progress = gr.Progress()
         ):
         print("!!!!!teacache:", teacache, app)
@@ -266,12 +266,6 @@ class Img2videoGenerator():
             print(f"{time.strftime('%Y-%m-%d-%H:%M:%S', time.localtime())} barrier-out-A {rank}")
             if rank == 0:
                 self.e.execute(flow, vid, {}, ['28'])
-                """
-                if debug == 2:
-                    return videos
-                if app and app.mode != 0: # 提前终止
-                    return videos
-                """
 
                 imgs_dir = f"{output_video_path.replace('.mp4','.imgs')}"
                 imgs_sr_dir = f"{output_video_path.replace('.mp4','.imgs.sr')}"
@@ -478,23 +472,22 @@ def ui(reqq=None, retq=None):
             )
     return demo
 
-def run_i2v(rank, world_size, reqq, retq):
+def run_i2v(rank, world_size, reqq, retq, debug):
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
     torch.cuda.set_device(rank)
     i2v_generator = Img2videoGenerator()
     i2v_generator.retq = retq
-    while True:
-        args = reqq.get()
-        if not args:
-            break
-        prompt, negative_prompt, init_img, batch_size, steps, teacache, width, height, length, cfg_scale, seed, fps = args
-        print("!!!", rank, args)
-        i2v_generator.generate(*args)
-        # i2v_generator.generate("", "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down, text"
-        #         , "/world/data-gpu-16/zhangjiguo/stable-diffusion/ComfyUI/i2v-temp/fb7425b555b3d45d55f4d60a10b0dfb47f3822b85be27b33434ce54635caf92e/00037-164934403.png"
-        #         # , 1, 2, False, 512, 896, 65, 6, 42, 16)
-        #         , 1, 10, False, 512, 896, 65, 6, 42, 16)
-        #         # , 2, 10, False, 512, 896, 65, 6, -1, 16)
+    if debug != 0:
+        i2v_generator.generate("", "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down, text"
+                , "/world/data-gpu-16/zhangjiguo/stable-diffusion/ComfyUI/i2v-temp/fb7425b555b3d45d55f4d60a10b0dfb47f3822b85be27b33434ce54635caf92e/00037-164934403.png"
+                , 1, 10, False, 512, 896, 65, 6, 42, 16)
+    else:
+        while True:
+            args = reqq.get()
+            if not args:
+                break
+            print("==reqq-get==", rank, args)
+            i2v_generator.generate(*args)
     dist.destroy_process_group()
 
 app = None
@@ -502,19 +495,9 @@ fn_eq = {}
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', default=7777)
-    # parser.add_argument('--debug', action='store_true')
     parser.add_argument('--debug', default=0, type=int)
 
     args = parser.parse_args()
-    debug = args.debug
-    if debug:
-        steps = 10
-        if debug == 2:
-            steps = 1
-        i2v_generator.generate("", "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down, text"
-                               , "/world/data-gpu-16/zhangjiguo/stable-diffusion/ComfyUI/i2v-temp/fb7425b555b3d45d55f4d60a10b0dfb47f3822b85be27b33434ce54635caf92e/00037-164934403.png"
-                               , 1, steps, False, 512, 896, 65, 6, 42, 16, debug=debug)
-        sys.exit(0)
 
     torch.multiprocessing.set_start_method('spawn')
     reqq = torch.multiprocessing.Queue()
@@ -523,7 +506,7 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29501"
     os.environ["TORCH_CPP_LOG_LEVEL"]="WARNING"
     world_size = torch.cuda.device_count()
-    mp.spawn(run_i2v, args=(world_size, reqq, retq), nprocs=world_size, join=False)
+    mp.spawn(run_i2v, args=(world_size, reqq, retq, args.debug), nprocs=world_size, join=False)
 
     app = ui(reqq=reqq, retq=retq)
     app.queue(64) # ValueError: Progress tracking requires queuing to be enabled
