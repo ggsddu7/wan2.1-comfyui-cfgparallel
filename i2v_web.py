@@ -342,6 +342,7 @@ def broadcast_qinfo():
 """
 
 def ui(reqq=None, retq=None):
+    """
     VL_SERVER = os.getenv("VL_SERVER", "http://172.26.3.24:7861")
     from gradio_client import Client, handle_file
     while True:
@@ -357,6 +358,7 @@ def ui(reqq=None, retq=None):
         result = client.predict(input_dict={"text":i2t_prompt,"files":[handle_file(img_path)]}, mode=0, api_name="/chat")
         # result = client.predict(input_dict={"text":"","files":[handle_file(img_path)]}, mode=3, api_name="/chat")
         return result
+    """
 
     def send_req(*args):
         reqq.put(args)
@@ -389,7 +391,7 @@ def ui(reqq=None, retq=None):
                     with gr.Row():
                         with gr.Column():
                             init_img = gr.Image(label="initial image", elem_id="init_img", show_label=False, interactive=True, type="filepath", height=512)
-                            pe_button = gr.Button(value="图片反推prompt(非必要操作，不知道怎么写再用)", variant='huggingface')
+                            # pe_button = gr.Button(value="图片反推prompt(非必要操作，不知道怎么写再用)", variant='huggingface')
                             prompt_textbox = gr.Textbox(label="Prompt", lines=2, value="")
                             negative_prompt_textbox = gr.Textbox(label="Negative prompt", lines=2, value="Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down, text")
                             with gr.Row():
@@ -420,11 +422,13 @@ def ui(reqq=None, retq=None):
                             result_info = gr.HTML(label="info", value="输出信息")
 
 
+                    """
                     pe_button.click(
                         fn=prompt_expand,
                         inputs=[init_img],
                         outputs=[prompt_textbox]
                     )
+                    """
                     stop_button.click(
                         fn=stop_generate,
                         js="() => { window.scrollTo(0, 0); }"
@@ -519,9 +523,7 @@ if __name__ == "__main__":
     os.environ["MASTER_PORT"] = "29501"
     os.environ["TORCH_CPP_LOG_LEVEL"]="WARNING"
     world_size = torch.cuda.device_count()
-    print("00000", world_size)
     mp.spawn(run_i2v, args=(world_size, reqq, retq), nprocs=world_size, join=False)
-    print("11111")
 
     app = ui(reqq=reqq, retq=retq)
     app.queue(64) # ValueError: Progress tracking requires queuing to be enabled
