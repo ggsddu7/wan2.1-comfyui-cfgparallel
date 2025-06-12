@@ -34,7 +34,7 @@
 
 ComfyUI lets you design and execute advanced stable diffusion pipelines using a graph/nodes/flowchart based interface. Available on Windows, Linux, and macOS.
 
-## Get Started
+## Usage
 
 ### web
 ```
@@ -48,7 +48,7 @@ env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD
 ```
 cfg并行，2卡1.95倍加速  
 测试显卡:`3090*2`    
-w*h*frames:`512*896*65`  
+`w*h*frames`:`512*896*65`  
 单步耗时：46s/单卡 24s/双卡
 
 #### [Desktop Application](https://www.comfy.org/download)
