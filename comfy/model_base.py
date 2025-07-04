@@ -140,7 +140,7 @@ class BaseModel(torch.nn.Module):
         sigma = t
         xc = self.model_sampling.calculate_input(sigma, x)
         if c_concat is not None:
-            xc = torch.cat([xc] + [c_concat], dim=1)
+            xc = torch.cat([xc] + [c_concat], dim=1) # noise, mask, concat_latent_image [1, 36, 17, 112, 64]
 
         context = c_crossattn
         dtype = self.get_dtype()

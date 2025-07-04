@@ -218,8 +218,8 @@ def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Te
         conds_ = [conds[rank]]
     else:
         conds_ = conds
-    for i in range(len(conds_)):
 
+    for i in range(len(conds_)):
         cond = conds_[i]
         default_c = []
         if cond is not None:

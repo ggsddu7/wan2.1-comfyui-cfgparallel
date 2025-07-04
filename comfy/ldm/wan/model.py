@@ -451,9 +451,9 @@ class WanModel(torch.nn.Module):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
-        # import pudb; pu.db
         t1 = time.time() * 1000
         # embeddings
+        # noise, repeat4(mask), concat_latent_image [1, 36, 17, 112, 64]
         x = self.patch_embedding(x.float()).to(x.dtype)
         t2 = time.time() * 1000
         grid_sizes = x.shape[2:]
@@ -466,12 +466,13 @@ class WanModel(torch.nn.Module):
         e0 = self.time_projection(e).unflatten(1, (6, self.dim))
         t4 = time.time() * 1000
 
-        # context
+        # context = cross_attn = text_encoder(prompt)
         context = self.text_embedding(context)
 
         if clip_fea is not None and self.img_emb is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
             context = torch.concat([context_clip, context], dim=1)
+        # context = clip_vision_output.penultimate_hidden_states, cross_attn
 
         # arguments
         kwargs = dict(
