@@ -15,6 +15,7 @@ from comfy.ldm.modules.diffusionmodules.mmdit import RMSNorm
 import comfy.ldm.common_dit
 import comfy.model_management
 
+import torch.distributed as dist
 
 def sinusoidal_embedding_1d(dim, position):
     # preprocess
@@ -451,9 +452,9 @@ class WanModel(torch.nn.Module):
             List[Tensor]:
                 List of denoised video tensors with original input shapes [C_out, F, H / 8, W / 8]
         """
-        # import pudb; pu.db
         t1 = time.time() * 1000
         # embeddings
+        # noise, repeat4(mask), concat_latent_image [1, 36, 17, 112, 64]
         x = self.patch_embedding(x.float()).to(x.dtype)
         t2 = time.time() * 1000
         grid_sizes = x.shape[2:]
@@ -466,12 +467,13 @@ class WanModel(torch.nn.Module):
         e0 = self.time_projection(e).unflatten(1, (6, self.dim))
         t4 = time.time() * 1000
 
-        # context
+        # context = cross_attn = text_encoder(prompt)
         context = self.text_embedding(context)
 
         if clip_fea is not None and self.img_emb is not None:
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
             context = torch.concat([context_clip, context], dim=1)
+        # context = clip_vision_output.penultimate_hidden_states, cross_attn
 
         # arguments
         kwargs = dict(
@@ -496,8 +498,27 @@ class WanModel(torch.nn.Module):
         xs1, nblock = x.shape[1], len(self.blocks)
         if xs1 <= 34048: # 不分层加载
             t5 = time.time() * 1000
-            for block in self.blocks:
-                x = block(x, **kwargs)
+            ### dist 分x和freqs
+            dist_inited = dist.is_initialized()
+            if dist_inited:
+                rank = dist.get_rank()
+                mid = 30464//2
+                if rank == 0:
+                    x = x[:,:mid,:]
+                    kwargs['freqs'] = kwargs['freqs'][:,:mid,:,:,:,:]
+                else:
+                    x = x[:,mid:,:]
+                    kwargs['freqs'] = kwargs['freqs'][:,mid:,:,:,:,:]
+                for block in self.blocks:
+                    x = block(x, **kwargs)
+                # x: [1, 15232, 5120]
+                output_list = [torch.zeros((1, mid, 5120), dtype=x.dtype, device=x.device) for _ in range(2)]
+                dist.all_gather(output_list, x.contiguous())
+                x = torch.cat(output_list, dim=1)
+            else:
+                for block in self.blocks:
+                    x = block(x, **kwargs)
+                # x: [1, 30464, 5120]
             t6 = time.time() * 1000
         else: # 分层加载
             skconfig={75600: (2,4), 61200: (2, 20), 46800: (2, 30)}

@@ -19,8 +19,6 @@ import comfy.hooks
 import scipy.stats
 import numpy
 
-import torch.distributed as dist
-
 def get_area_and_mult(conds, x_in, timestep_in):
     dims = tuple(x_in.shape[2:])
     area = None
@@ -207,20 +205,11 @@ def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Te
     default_conds = []
     has_default_conds = False
 
-    dist_inited = dist.is_initialized()
     for i in range(len(conds)):
         out_conds.append(torch.zeros_like(x_in))
-        if not dist_inited:
-            out_counts.append(torch.ones_like(x_in) * 1e-37)
+        out_counts.append(torch.ones_like(x_in) * 1e-37)
 
-    if dist_inited:
-        rank = dist.get_rank()
-        conds_ = [conds[rank]]
-    else:
-        conds_ = conds
-    for i in range(len(conds_)):
-
-        cond = conds_[i]
+        cond = conds[i]
         default_c = []
         if cond is not None:
             for x in cond:
@@ -320,28 +309,25 @@ def _calc_cond_batch(model: 'BaseModel', conds: list[list[dict]], x_in: torch.Te
                 output = model_options['model_function_wrapper'](model.apply_model, {"input": input_x, "timestep": timestep_, "c": c, "cond_or_uncond": cond_or_uncond}).chunk(batch_chunks)
             else:
                 output = model.apply_model(input_x, timestep_, **c).chunk(batch_chunks)
-            if dist_inited:
-                dist.all_gather(out_conds, output[0])
-            else:
-                for o in range(batch_chunks):
-                    cond_index = cond_or_uncond[o]
-                    a = area[o]
-                    if a is None:
-                        out_conds[cond_index] += output[o] * mult[o]
-                        out_counts[cond_index] += mult[o]
-                    else:
-                        out_c = out_conds[cond_index]
-                        out_cts = out_counts[cond_index]
-                        dims = len(a) // 2
-                        for i in range(dims):
-                            out_c = out_c.narrow(i + 2, a[i + dims], a[i])
-                            out_cts = out_cts.narrow(i + 2, a[i + dims], a[i])
-                        out_c += output[o] * mult[o]
-                        out_cts += mult[o]
 
-    if not dist_inited:
-        for i in range(len(out_conds)):
-            out_conds[i] /= out_counts[i]
+            for o in range(batch_chunks):
+                cond_index = cond_or_uncond[o]
+                a = area[o]
+                if a is None:
+                    out_conds[cond_index] += output[o] * mult[o]
+                    out_counts[cond_index] += mult[o]
+                else:
+                    out_c = out_conds[cond_index]
+                    out_cts = out_counts[cond_index]
+                    dims = len(a) // 2
+                    for i in range(dims):
+                        out_c = out_c.narrow(i + 2, a[i + dims], a[i])
+                        out_cts = out_cts.narrow(i + 2, a[i + dims], a[i])
+                    out_c += output[o] * mult[o]
+                    out_cts += mult[o]
+
+    for i in range(len(out_conds)):
+        out_conds[i] /= out_counts[i]
 
     return out_conds
 
