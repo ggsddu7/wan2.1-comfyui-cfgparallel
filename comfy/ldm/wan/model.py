@@ -568,6 +568,7 @@ class WanModel(torch.nn.Module):
                 print(f"==chunk1== {rank} {x.shape} {shared_seqlen} {kwargs['freqs'].shape}")
                 for block in self.blocks:
                     x = block(x, **kwargs)
+                torch.cuda.synchronize()
                 # x: [1, 15232, 5120]
                 output_list = [torch.zeros((1, shared_seqlen, 5120), dtype=x.dtype, device=x.device) for _ in range(world_size)]
                 dist.all_gather(output_list, x.contiguous())
