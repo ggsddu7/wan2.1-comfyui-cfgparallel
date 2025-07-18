@@ -29,6 +29,7 @@ class WanImageToVideo:
 
     def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, clip_vision_output=None):
         t1 = time.time()
+        # import pudb; pu.db
         latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         if start_image is not None:
             start_image = comfy.utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)

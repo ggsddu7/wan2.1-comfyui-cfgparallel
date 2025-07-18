@@ -63,6 +63,7 @@ class CLIPTextEncode(ComfyNodeABC):
     DESCRIPTION = "Encodes a text prompt using a CLIP model into an embedding that can be used to guide the diffusion model towards generating specific images."
 
     def encode(self, clip, text):
+        # import pudb; pu.db
         if clip is None:
             raise RuntimeError("ERROR: clip input is invalid: None\n\nIf the clip is from a checkpoint loader node your checkpoint does not contain a valid clip or text encoder model.")
         tokens = clip.tokenize(text)
