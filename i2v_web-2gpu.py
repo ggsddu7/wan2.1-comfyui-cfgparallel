@@ -476,6 +476,8 @@ def run_i2v(rank, world_size, reqq, retq, debug):
     try:
         print("run_i2v-info:", rank, world_size, os.environ["MASTER_PORT"])
         dist.init_process_group("nccl", rank=rank, world_size=world_size)
+        import deepspeed.comm as dpdist
+        dpdist.init_distributed()
         torch.cuda.set_device(rank)
         i2v_generator = Img2videoGenerator()
         i2v_generator.retq = retq

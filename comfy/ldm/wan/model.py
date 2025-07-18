@@ -55,6 +55,11 @@ class WanSelfAttention(nn.Module):
         self.norm_q = RMSNorm(dim, eps=eps, elementwise_affine=True, device=operation_settings.get("device"), dtype=operation_settings.get("dtype")) if qk_norm else nn.Identity()
         self.norm_k = RMSNorm(dim, eps=eps, elementwise_affine=True, device=operation_settings.get("device"), dtype=operation_settings.get("dtype")) if qk_norm else nn.Identity()
 
+        spg = None # dist.new_group()
+        from deepspeed.sequence.layer import DistributedAttention
+        self.dist_attn = DistributedAttention(optimized_attention, spg)
+
+
     def forward(self, x, freqs):
         r"""
         Args:
@@ -70,23 +75,72 @@ class WanSelfAttention(nn.Module):
             v = self.v(x).view(b, s, n * d)
             return q, k, v
 
-        t0 = time.time() * 1000
         q, k, v = qkv_fn(x)
-        t1 = time.time() * 1000
+        rank, dist_inited = -1, dist.is_initialized()
+        if dist_inited:
+            rank = dist.get_rank()
+        print(f"WanSelfAttention-00 {rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
         q, k = apply_rope(q, k, freqs)
-        t2 = time.time() * 1000
+        if not dist_inited:
+            x = optimized_attention(
+                q.view(b, s, n * d),
+                k.view(b, s, n * d),
+                v,
+                heads=self.num_heads,
+            )
+        else:
+            # q = q.view(b, s, n * d)
+            # k = k.view(b, s, n * d)
+            v = v.view(b, s, n, d)
 
-        x = optimized_attention(
-            q.view(b, s, n * d),
-            k.view(b, s, n * d),
-            v,
-            heads=self.num_heads,
-        )
-        t3 = time.time() * 1000
+            x = self.dist_attn(q, k, v, 0, heads=self.num_heads)
+        """
+        if False:
+            x = optimized_attention(
+                q.view(b, s, n * d),
+                k.view(b, s, n * d),
+                v,
+                heads=self.num_heads,
+            )
+        else:
+            aa = (torch.arange(8).reshape(1,4,2)+8*rank).to("cuda")
+            a2aout = torch.empty_like(aa)
+            dist.all_to_all_single(a2aout, aa)
+            print(f"{rank} {torch.arange(16).reshape(1,8,2)} | {aa} | {a2aout} | {a2aout.reshape(1,8,1)}")
+            print(f"{rank} {a2aout.reshape(1,8,1).reshape(1,4,2)}")
+            xxxx
+            print(f"WanSelfAttention-11 {rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
+            P = torch.cuda.device_count()
+            s_ = s // P
+            num_heads = n // P
+
+            q = q[:,rank*s_:(rank+1)*s_,:]
+            a2aout = torch.empty_like(q)
+            print(f"WanSelfAttention-11 {rank} {x.shape} ==> {q.shape} {a2aout.shape}")
+            dist.all_to_all_single(a2aout, q)
+            q = a2aout.reshape(b, s, n*d//P)
+            print(f"WanSelfAttention-22 {rank} {x.shape} ==> {q.shape} {a2aout.shape}")
+
+            k = k[:,rank*s_:(rank+1)*s_,:]
+            a2aout = torch.empty_like(k)
+            print(f"WanSelfAttention-33 {rank} {x.shape} ==> {k.shape} {a2aout.shape}")
+            dist.all_to_all_single(a2aout, k)
+            k = a2aout.reshape(b, s, n*d//P)
+            print(f"WanSelfAttention-44 {rank} {x.shape} ==> {k.shape} {a2aout.shape}")
+
+            v = v[:,rank*s_:(rank+1)*s_,:]
+            a2aout = torch.empty_like(v)
+            print(f"WanSelfAttention-55 {rank} {x.shape} ==> {v.shape} {a2aout.shape}")
+            dist.all_to_all_single(a2aout, v)
+            v = a2aout.reshape(b, s, n*d//P)
+            print(f"WanSelfAttention-66 {rank} {x.shape} ==> {v.shape} {a2aout.shape}")
+
+            x = optimized_attention(q, k, v, heads=num_heads).reshape(b, s_, n * d)
+            print(f"WanSelfAttention-77 {rank} {x.shape}")
+            xxxxx
+        """
 
         x = self.o(x)
-        t4 = time.time() * 1000
-        # print(f"WanSelfAttention {t1-t0:.0f} {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t4-t0:.0f}")
         return x
 
 
@@ -239,6 +293,7 @@ class WanAttentionBlock(nn.Module):
         bb = aa * (1 + e[1]) + e[0]
         tb = time.time() * 1000
         y = self.self_attn(bb, freqs)
+        # torch.cuda.synchronize() # a2a_qkvx需要及时释放现存
         t2 = time.time() * 1000
 
         x = x + y * e[2]
@@ -475,6 +530,8 @@ class WanModel(torch.nn.Module):
             context = torch.concat([context_clip, context], dim=1)
         # context = clip_vision_output.penultimate_hidden_states, cross_attn
 
+        print("WanModel-00000", e0.shape, context_clip.shape, context.shape, grid_sizes, freqs.shape, x.shape)
+        # import pudb; pu.db
         # arguments
         kwargs = dict(
             e=e0,
@@ -496,23 +553,23 @@ class WanModel(torch.nn.Module):
         720*1280*17=>[1, 16,  5, 160, 90]=>[1, 18000, 5120]
         """
         xs1, nblock = x.shape[1], len(self.blocks)
-        if xs1 <= 34048: # 不分层加载
+        print("XXXXXX", xs1, nblock)
+        if True: # xs1 <= 34048: # 不分层加载
             t5 = time.time() * 1000
             ### dist 分x和freqs
             dist_inited = dist.is_initialized()
             if dist_inited:
                 rank = dist.get_rank()
-                mid = 30464//2
-                if rank == 0:
-                    x = x[:,:mid,:]
-                    kwargs['freqs'] = kwargs['freqs'][:,:mid,:,:,:,:]
-                else:
-                    x = x[:,mid:,:]
-                    kwargs['freqs'] = kwargs['freqs'][:,mid:,:,:,:,:]
+                world_size = torch.cuda.device_count()
+                shared_seqlen = x.shape[1] // world_size
+                print(f"==chunk0== {rank} {x.shape} {shared_seqlen} {kwargs['freqs'].shape}")
+                x = x[:,rank*shared_seqlen:(rank+1)*shared_seqlen,:]
+                kwargs['freqs'] = kwargs['freqs'][:,rank*shared_seqlen:(rank+1)*shared_seqlen,:,:,:,:]
+                print(f"==chunk1== {rank} {x.shape} {shared_seqlen} {kwargs['freqs'].shape}")
                 for block in self.blocks:
                     x = block(x, **kwargs)
                 # x: [1, 15232, 5120]
-                output_list = [torch.zeros((1, mid, 5120), dtype=x.dtype, device=x.device) for _ in range(2)]
+                output_list = [torch.zeros((1, shared_seqlen, 5120), dtype=x.dtype, device=x.device) for _ in range(world_size)]
                 dist.all_gather(output_list, x.contiguous())
                 x = torch.cat(output_list, dim=1)
             else:
@@ -521,6 +578,7 @@ class WanModel(torch.nn.Module):
                 # x: [1, 30464, 5120]
             t6 = time.time() * 1000
         else: # 分层加载
+            print("------------fencengjiazai------------")
             skconfig={75600: (2,4), 61200: (2, 20), 46800: (2, 30)}
             slen, klen = skconfig[min(filter(lambda k: k-xs1>=0, skconfig.keys()))]
             # print(f"### == {','.join([blk.cross_attn.q.weight.device.type for blk in self.blocks])} {xs1} {slen} {klen}")
@@ -543,12 +601,15 @@ class WanModel(torch.nn.Module):
                 if bidx >= klen and bidx < nblock:
                     block.to("cpu", non_blocking=True)
 
+        print("aaaa", x.shape, e.shape)
         # head
         x = self.head(x, e)
+        print("bbbb", x.shape)
         t7 = time.time() * 1000
 
         # unpatchify
         x = self.unpatchify(x, grid_sizes)
+        print("cccc", x.shape, grid_sizes)
         t8 = time.time() * 1000
         # print(f"WanModel {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t8-t1:.0f}")
         return x
