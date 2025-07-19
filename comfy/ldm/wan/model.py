@@ -79,7 +79,7 @@ class WanSelfAttention(nn.Module):
         rank, dist_inited = -1, dist.is_initialized()
         if dist_inited:
             rank = dist.get_rank()
-        print(f"WanSelfAttention-00 {rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
+        # print(f"WanSelfAttention-00 {rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
         q, k = apply_rope(q, k, freqs)
         if not dist_inited:
             x = optimized_attention(
@@ -602,15 +602,15 @@ class WanModel(torch.nn.Module):
                 if bidx >= klen and bidx < nblock:
                     block.to("cpu", non_blocking=True)
 
-        print("aaaa", x.shape, e.shape)
+        # print("aaaa", x.shape, e.shape)
         # head
         x = self.head(x, e)
-        print("bbbb", x.shape)
+        # print("bbbb", x.shape)
         t7 = time.time() * 1000
 
         # unpatchify
         x = self.unpatchify(x, grid_sizes)
-        print("cccc", x.shape, grid_sizes)
+        # print("cccc", x.shape, grid_sizes)
         t8 = time.time() * 1000
         # print(f"WanModel {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t8-t1:.0f}")
         return x
