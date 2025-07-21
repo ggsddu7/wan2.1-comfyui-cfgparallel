@@ -4,6 +4,7 @@ import time
 
 import math
 
+import gc
 import torch
 import torch.nn as nn
 from einops import repeat
@@ -55,9 +56,11 @@ class WanSelfAttention(nn.Module):
         self.norm_q = RMSNorm(dim, eps=eps, elementwise_affine=True, device=operation_settings.get("device"), dtype=operation_settings.get("dtype")) if qk_norm else nn.Identity()
         self.norm_k = RMSNorm(dim, eps=eps, elementwise_affine=True, device=operation_settings.get("device"), dtype=operation_settings.get("dtype")) if qk_norm else nn.Identity()
 
-        spg = None # dist.new_group()
-        from deepspeed.sequence.layer import DistributedAttention
-        self.dist_attn = DistributedAttention(optimized_attention, spg)
+        self.rank, self.dist_inited = -1, dist.is_initialized()
+        if self.dist_inited:
+            self.rank = dist.get_rank()
+            from deepspeed.sequence.layer import DistributedAttention
+            self.dist_attn = DistributedAttention(optimized_attention, None)
 
 
     def forward(self, x, freqs):
@@ -76,12 +79,9 @@ class WanSelfAttention(nn.Module):
             return q, k, v
 
         q, k, v = qkv_fn(x)
-        rank, dist_inited = -1, dist.is_initialized()
-        if dist_inited:
-            rank = dist.get_rank()
-        # print(f"WanSelfAttention-00 {rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
+        print(f"WanSelfAttention-00 {self.rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
         q, k = apply_rope(q, k, freqs)
-        if not dist_inited:
+        if not self.dist_inited:
             x = optimized_attention(
                 q.view(b, s, n * d),
                 k.view(b, s, n * d),
@@ -179,6 +179,12 @@ class WanI2VCrossAttention(WanSelfAttention):
         # self.alpha = nn.Parameter(torch.zeros((1, )))
         self.norm_k_img = RMSNorm(dim, eps=eps, elementwise_affine=True, device=operation_settings.get("device"), dtype=operation_settings.get("dtype")) if qk_norm else nn.Identity()
 
+        self.rank, self.dist_inited = -1, dist.is_initialized()
+        if self.dist_inited:
+            self.rank = dist.get_rank()
+            from deepspeed.sequence.layer import DistributedAttention
+            self.dist_attn = DistributedAttention(optimized_attention, None)
+
     def forward(self, x, context):
         r"""
         Args:
@@ -201,10 +207,26 @@ class WanI2VCrossAttention(WanSelfAttention):
         t6 = time.time() * 1000
         v_img = self.v_img(context_img)
         t7 = time.time() * 1000
-        img_x = optimized_attention(q, k_img, v_img, heads=self.num_heads)
-        t8 = time.time() * 1000
+        print("000000", q.shape, k_img.shape, v_img.shape, k.shape, v.shape)
+        if False: #self.dist_inited:
+            b, n, d = q.shape
+            q = q.view(b, n, self.num_heads, -1)
+            b, n, d = k_img.shape
+            k_img = k_img.view(b, n, self.num_heads, -1)
+            b, n, d = v_img.shape
+            v_img = v_img.view(b, n, self.num_heads, -1)
+            img_x = self.dist_attn(q, k_img, v_img, 0, heads=self.num_heads)
+            t8 = time.time() * 1000
+            b, n, d = k.shape
+            k = k.view(b, n, self.num_heads, -1)
+            b, n, d = v.shape
+            v = v.view(b, n, self.num_heads, -1)
+            x = self.dist_attn(q, k, v, 0, heads=self.num_heads)
+        else:
+            img_x = optimized_attention(q, k_img, v_img, heads=self.num_heads)
+            t8 = time.time() * 1000
+            x = optimized_attention(q, k, v, heads=self.num_heads)
         # compute attention
-        x = optimized_attention(q, k, v, heads=self.num_heads)
         t9 = time.time() * 1000
 
         # output
@@ -212,7 +234,7 @@ class WanI2VCrossAttention(WanSelfAttention):
         t10 = time.time() * 1000
         x = self.o(x)
         t11 = time.time() * 1000
-        # print(f"WanI2VCrossAttention {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t9-t8:.0f} {t10-t9:.0f} {t11-t10:.0f} {t11-t1:.0f}")
+        print(f"WanI2VCrossAttention {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t7-t6:.0f} {t8-t7:.0f} {t9-t8:.0f} {t10-t9:.0f} {t11-t10:.0f} {t11-t1:.0f}")
         return x
 
 
@@ -313,7 +335,7 @@ class WanAttentionBlock(nn.Module):
         x = x + y * e[5]
         t6 = time.time() * 1000
         # print(f"WanAttentionBlock {self.bidx} {t1-t0:.0f} {t2-t1:.0f} {t3-t2:.0f} {t4-t3:.0f} {t5-t4:.0f} {t6-t5:.0f} {t6-t0:.0f}", end=" | ")
-        # print(f"WanAttentionBlock {self.bidx} {t1-t0:.0f} {t2-t1:.0f}({ta-t1:.0f} {tb-ta:.0f} {t2-tb:.0f}) {t3-t2:.0f} {t4-t3:.0f}({tc-t3:.0f} {td-tc:.0f} {t4-td:.0f}) {t5-t4:.0f} {t6-t5:.0f} {t6-t0:.0f}")
+        print(f"WanAttentionBlock {self.bidx} {t1-t0:.0f} {t2-t1:.0f}({ta-t1:.0f} {tb-ta:.0f} {t2-tb:.0f}) {t3-t2:.0f} {t4-t3:.0f}({tc-t3:.0f} {td-tc:.0f} {t4-td:.0f}) {t5-t4:.0f} {t6-t5:.0f} {t6-t0:.0f}")
         # print("-----------------------------------------------------------------------------------")
         return x
 
@@ -477,6 +499,9 @@ class WanModel(torch.nn.Module):
             self.img_emb = MLPProj(1280, dim, operation_settings=operation_settings)
         else:
             self.img_emb = None
+        self.dist_inited = dist.is_initialized()
+        if self.dist_inited:
+            self.world_size = dist.get_world_size()
 
     def forward_orig(
         self,
@@ -557,22 +582,25 @@ class WanModel(torch.nn.Module):
         if True: # xs1 <= 34048: # 不分层加载
             t5 = time.time() * 1000
             ### dist 分x和freqs
-            dist_inited = dist.is_initialized()
-            if dist_inited:
+            if self.dist_inited:
                 rank = dist.get_rank()
-                world_size = torch.cuda.device_count()
-                shared_seqlen = x.shape[1] // world_size
+                shared_seqlen = x.shape[1] // self.world_size
                 print(f"==chunk0== {rank} {x.shape} {shared_seqlen} {kwargs['freqs'].shape}")
                 x = x[:,rank*shared_seqlen:(rank+1)*shared_seqlen,:]
                 kwargs['freqs'] = kwargs['freqs'][:,rank*shared_seqlen:(rank+1)*shared_seqlen,:,:,:,:]
                 print(f"==chunk1== {rank} {x.shape} {shared_seqlen} {kwargs['freqs'].shape}")
                 for block in self.blocks:
                     x = block(x, **kwargs)
-                torch.cuda.synchronize()
                 # x: [1, 15232, 5120]
-                output_list = [torch.zeros((1, shared_seqlen, 5120), dtype=x.dtype, device=x.device) for _ in range(world_size)]
+                output_list = [torch.zeros((1, shared_seqlen, 5120), dtype=x.dtype, device=x.device) for _ in range(self.world_size)]
                 dist.all_gather(output_list, x.contiguous())
                 x = torch.cat(output_list, dim=1)
+                del output_list
+                """
+                torch.cuda.synchronize()
+                gc.collect()
+                torch.cuda.empty_cache()
+                """
             else:
                 for block in self.blocks:
                     x = block(x, **kwargs)
