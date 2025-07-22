@@ -1,4 +1,4 @@
-
+# usp+CUDA_LAUNCH_BLOCKING=1 修复OOM&速度更快
 import os
 import sys
 from pathlib import Path
@@ -483,7 +483,7 @@ def run_i2v(rank, world_size, reqq, retq, debug):
         i2v_generator.retq = retq
         if debug != 0:
             # i2v_generator.generate("a girl laughing", "Overexposure, static, blurred details, subtitles, paintings, pictures, still, overall gray, worst quality, low quality, JPEG compression residue, ugly, mutilated, redundant fingers, poorly painted hands, poorly painted faces, deformed, disfigured, deformed limbs, fused fingers, cluttered background, three legs, a lot of people in the background, upside down, text", "/world/data-gpu-16/zhangjiguo/stable-diffusion/ComfyUI/i2v-temp/fb7425b555b3d45d55f4d60a10b0dfb47f3822b85be27b33434ce54635caf92e/00037-164934403.png", 1, 10, False, 512, 896, 33, 6, 42, 16)
-            i2v_generator.generate("Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard. The fluffy-furred feline gazes directly at the camera with a relaxed expression. Blurred beach scenery forms the background featuring crystal-clear waters, distant green hills, and a blue sky dotted with white clouds. The cat assumes a naturally relaxed posture, as if savoring the sea breeze and warm sunlight. A close-up shot highlights the feline's intricate details and the refreshing atmosphere of the seaside.", "镜头晃动，色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走", "/world/data-gpu-16/zhangjiguo/stable-diffusion/Wan2.1/examples/i2v_input.JPG", 1, 10, False, 480, 832, 33, 6, -1, 16)
+            i2v_generator.generate("Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard. The fluffy-furred feline gazes directly at the camera with a relaxed expression. Blurred beach scenery forms the background featuring crystal-clear waters, distant green hills, and a blue sky dotted with white clouds. The cat assumes a naturally relaxed posture, as if savoring the sea breeze and warm sunlight. A close-up shot highlights the feline's intricate details and the refreshing atmosphere of the seaside.", "镜头晃动，色调艳丽，过曝，静态，细节模糊不清，字幕，风格，作品，画作，画面，静止，整体发灰，最差质量，低质量，JPEG压缩残留，丑陋的，残缺的，多余的手指，画得不好的手部，画得不好的脸部，畸形的，毁容的，形态畸形的肢体，手指融合，静止不动的画面，杂乱的背景，三条腿，背景人很多，倒着走", "/world/data-gpu-16/zhangjiguo/stable-diffusion/Wan2.1/examples/i2v_input.JPG", 1, 10, False, 480, 832, 65, 6, 739026098, 16) # 739026098=>md5:34f19ca98c8b7c873e1bcf54a6422cbe
         else:
             while True:
                 args = reqq.get()

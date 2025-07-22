@@ -4,7 +4,7 @@ import time
 
 import math
 
-import gc
+# import gc
 import torch
 import torch.nn as nn
 from einops import repeat
@@ -79,8 +79,8 @@ class WanSelfAttention(nn.Module):
             return q, k, v
 
         q, k, v = qkv_fn(x)
-        print(f"WanSelfAttention-00 {self.rank} {x.shape} ==> {q.shape} {k.shape} {v.shape}")
         q, k = apply_rope(q, k, freqs)
+        # print(f"WanSelfAttention-00 {self.rank} {x.shape} ==> {q.shape} {k.shape} {v.shape} | {torch.cuda.memory_allocated(q.device)}")
         if not self.dist_inited:
             x = optimized_attention(
                 q.view(b, s, n * d),
