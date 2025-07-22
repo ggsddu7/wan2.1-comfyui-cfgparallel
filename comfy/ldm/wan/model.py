@@ -315,7 +315,7 @@ class WanAttentionBlock(nn.Module):
         bb = aa * (1 + e[1]) + e[0]
         tb = time.time() * 1000
         y = self.self_attn(bb, freqs)
-        torch.cuda.synchronize() # 不用CUDA_LAUNCH_BLOCKING则a2a_qkvx需要及时释放显存
+        torch.cuda.synchronize() # 比CUDA_LAUNCH_BLOCKING快5%左右
         t2 = time.time() * 1000
 
         x = x + y * e[2]

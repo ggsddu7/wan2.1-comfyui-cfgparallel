@@ -1,41 +1,16 @@
-<div align="center">
-
-
-# ComfyUI
-**The most powerful and modular visual AI engine and application.**
-
-
-[![Website][website-shield]][website-url]
-[![Dynamic JSON Badge][discord-shield]][discord-url]
-[![Matrix][matrix-shield]][matrix-url]
-<br>
-[![][github-release-shield]][github-release-link]
-[![][github-release-date-shield]][github-release-link]
-[![][github-downloads-shield]][github-downloads-link]
-[![][github-downloads-latest-shield]][github-downloads-link]
-
-[matrix-shield]: https://img.shields.io/badge/Matrix-000000?style=flat&logo=matrix&logoColor=white
-[matrix-url]: https://app.element.io/#/room/%23comfyui_space%3Amatrix.org
-[website-shield]: https://img.shields.io/badge/ComfyOrg-4285F4?style=flat
-[website-url]: https://www.comfy.org/
-<!-- Workaround to display total user from https://github.com/badges/shields/issues/4500#issuecomment-2060079995 -->
-[discord-shield]: https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Finvites%2Fcomfyorg%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&logo=discord&logoColor=white&label=Discord&color=green&suffix=%20total
-[discord-url]: https://www.comfy.org/discord
-
-[github-release-shield]: https://img.shields.io/github/v/release/comfyanonymous/ComfyUI?style=flat&sort=semver
-[github-release-link]: https://github.com/comfyanonymous/ComfyUI/releases
-[github-release-date-shield]: https://img.shields.io/github/release-date/comfyanonymous/ComfyUI?style=flat
-[github-downloads-shield]: https://img.shields.io/github/downloads/comfyanonymous/ComfyUI/total?style=flat
-[github-downloads-latest-shield]: https://img.shields.io/github/downloads/comfyanonymous/ComfyUI/latest/total?style=flat&label=downloads%40latest
-[github-downloads-link]: https://github.com/comfyanonymous/ComfyUI/releases
-
-![ComfyUI Screenshot](https://github.com/user-attachments/assets/7ccaf2c1-9b72-41ae-9a89-5688c94b7abe)
-</div>
-
 ComfyUI lets you design and execute advanced stable diffusion pipelines using a graph/nodes/flowchart based interface. Available on Windows, Linux, and macOS.
 
-## Usage
+## Performance
+usp并行，2卡1.75倍加速, 4卡～2.8倍加速
+```
+480*832*33: dsusp-2卡:1m56s(1.6倍)；dsusp-4卡:1m17s(2.4倍)；单卡:3m05s 
+480*832*65+CUDA_LAUNCH_BLOCKING: dsusp-2卡:4m40s(1.6倍)；dsusp-4卡:2m53s(2.6倍)；单卡:7m27s # md5一致
+480*832*65+self_attn后synchronize: dsusp-2卡:4m23s(1.6倍)；dsusp-4卡:2m45s(2.6倍)；单卡:7m27s # md5一致
+480*832*81+CUDA_LAUNCH_BLOCKING: dsusp-2卡:5m59s(1.74倍)；dsusp-4卡:3m44s(2.8倍)；单卡:10m24s # md5一致
+480*832*81+self_attn后synchronize: dsusp-2卡:5m53s(1.76倍)；dsusp-4卡:3m37s(2.9倍)；单卡:10m24s # md5一致
+```
 
+## Usage
 ### web
 ```
 env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web-2gpu.py
@@ -46,10 +21,6 @@ env CUDA_VISIBLE_DEVICES=0 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_W
 env CUDA_VISIBLE_DEVICES=0,1 CUDA_LAUNCH_BLOCKING-=1 GRADIO_TEMP_DIR=i2v-temp SD_WEBUI_LOG_LEVEL=INFO CUSTOM_NODES_PATH=custom_nodes-i2v python i2v_web-2gpu.py --debug 1
 
 ```
-cfg并行，2卡1.95倍加速  
-测试显卡:`3090*2`    
-`w*h*frames`:`512*896*65`  
-单步耗时：46s/单卡 24s/双卡
 
 #### [Desktop Application](https://www.comfy.org/download)
 - The easiest way to get started. 
