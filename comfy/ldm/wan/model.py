@@ -207,7 +207,7 @@ class WanI2VCrossAttention(WanSelfAttention):
         t6 = time.time() * 1000
         v_img = self.v_img(context_img)
         t7 = time.time() * 1000
-        print("000000", q.shape, k_img.shape, v_img.shape, k.shape, v.shape)
+        # print("000000", q.shape, k_img.shape, v_img.shape, k.shape, v.shape)
         if False: #self.dist_inited:
             b, n, d = q.shape
             q = q.view(b, n, self.num_heads, -1)
@@ -315,7 +315,7 @@ class WanAttentionBlock(nn.Module):
         bb = aa * (1 + e[1]) + e[0]
         tb = time.time() * 1000
         y = self.self_attn(bb, freqs)
-        # torch.cuda.synchronize() # a2a_qkvx需要及时释放现存
+        torch.cuda.synchronize() # 不用CUDA_LAUNCH_BLOCKING则a2a_qkvx需要及时释放显存
         t2 = time.time() * 1000
 
         x = x + y * e[2]
@@ -579,7 +579,7 @@ class WanModel(torch.nn.Module):
         """
         xs1, nblock = x.shape[1], len(self.blocks)
         print("XXXXXX", xs1, nblock)
-        if True: # xs1 <= 34048: # 不分层加载
+        if xs1 <= 34048: # 不分层加载
             t5 = time.time() * 1000
             ### dist 分x和freqs
             if self.dist_inited:
